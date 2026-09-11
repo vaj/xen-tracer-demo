@@ -18,6 +18,11 @@ obj-$(CONFIG_EVTCHN_FIFO) += event_fifo.o
 obj-$(CONFIG_GRANT_TABLE) += grant_table.o
 obj-y += gzip/
 obj-$(CONFIG_HYPFS) += hypfs.o
+ifeq ($(CONFIG_HYPFS),y)
+obj-$(CONFIG_ARM64_PATCHABLE_FUNCTION_ENTRY) += hypfs_trace.o
+obj-$(CONFIG_ARM64_PATCHABLE_FUNCTION_ENTRY) += function_trace.o
+endif
+obj-$(CONFIG_ARM64_PATCHABLE_FUNCTION_ENTRY) += function_hook.o
 obj-$(CONFIG_IOREQ_SERVER) += ioreq.o
 obj-y += irq.o
 obj-y += kernel.o

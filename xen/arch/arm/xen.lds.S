@@ -61,6 +61,11 @@ SECTIONS
        *(.data.rel.ro)
        *(.data.rel.ro.*)
 
+       . = ALIGN(8);
+       __start_patchable_function_entries = .;
+       KEEP(*(__patchable_function_entries))
+       __stop_patchable_function_entries = .;
+
        . = ALIGN(4);
        __proc_info_start = .;
        *(.proc.info)

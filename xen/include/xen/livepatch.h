@@ -19,6 +19,7 @@ struct xen_sysctl_livepatch_op;
 #ifdef CONFIG_LIVEPATCH
 
 #include <xen/lib.h>
+#include <xen/list.h>
 
 /*
  * We use alternative and exception table code - which by default are __init
@@ -35,6 +36,7 @@ struct xen_sysctl_livepatch_op;
 #define LIVEPATCH             "livepatch: "
 /* ELF payload special section names. */
 #define ELF_LIVEPATCH_FUNC        ".livepatch.funcs"
+#define ELF_LIVEPATCH_TRACES      ".livepatch.traces"
 #define ELF_LIVEPATCH_DEPENDS     ".livepatch.depends"
 #define ELF_LIVEPATCH_XEN_DEPENDS ".livepatch.xen_depends"
 #define ELF_BUILD_ID_NOTE         ".note.gnu.build-id"
@@ -97,6 +99,11 @@ void arch_livepatch_init(void);
 #include <asm/livepatch.h>
 int arch_livepatch_verify_func(const struct livepatch_func *func);
 
+typedef void (*livepatch_trace_func_t)(unsigned long ip,
+                                        unsigned long parent_ip);
+
+void xen_livepatch_trace_dispatcher(unsigned long ip, unsigned long parent_ip);
+
 static inline
 unsigned int livepatch_insn_len(const struct livepatch_func *func,
                                 const struct livepatch_fstate *state)
@@ -133,6 +140,8 @@ void arch_livepatch_apply(const struct livepatch_func *func,
                           struct livepatch_fstate *state);
 void arch_livepatch_revert(const struct livepatch_func *func,
                            struct livepatch_fstate *state);
+void arch_livepatch_apply_trace(const struct livepatch_func *trace);
+void arch_livepatch_revert_trace(const struct livepatch_func *trace);
 void arch_livepatch_post_action(void);
 
 void arch_livepatch_mask(void);

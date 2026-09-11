@@ -26,6 +26,10 @@
 #include <xen/livepatch.h>
 #include <xen/livepatch_payload.h>
 
+#ifdef CONFIG_ARM64_PATCHABLE_FUNCTION_ENTRY
+#include <xen/function_hook.h>
+#endif
+
 #include <asm/alternative.h>
 #include <asm/event.h>
 
@@ -196,6 +200,43 @@ static const char *cf_check livepatch_symbols_lookup(
     rcu_read_unlock(&rcu_payload_lock);
 
     return n;
+}
+
+void xen_livepatch_trace_dispatcher(unsigned long ip, unsigned long parent_ip)
+{
+    const struct payload *data;
+    unsigned int i;
+    const struct livepatch_func *f;
+    bool dispatched = false;
+
+    rcu_read_lock(&rcu_payload_lock);
+
+    list_for_each_entry_rcu ( data, &payload_list, list )
+    {
+        if ( data->state != LIVEPATCH_STATE_APPLIED || !data->is_trace )
+            continue;
+
+        for ( i = 0; i < data->nfuncs; ++i )
+        {
+            f = &data->funcs[i];
+
+            if ( (unsigned long)f->old_addr != ip )
+                continue;
+
+            ASSERT(f->new_addr);
+            ((livepatch_trace_func_t)f->new_addr)(ip, parent_ip);
+            dispatched = true;
+            goto out;
+        }
+    }
+
+out:
+    rcu_read_unlock(&rcu_payload_lock);
+
+#ifdef CONFIG_ARM64_PATCHABLE_FUNCTION_ENTRY
+    /* Call tracers */
+    function_hook_dispatch(ip, parent_ip);
+#endif
 }
 
 /* Lookup function's old address if not already resolved. */
@@ -509,8 +550,8 @@ static int check_xen_buildid(const struct livepatch_elf *elf)
     if ( lp_id.len != len || memcmp(id, lp_id.p, len) )
     {
         printk(XENLOG_ERR LIVEPATCH "%s: build-id mismatch:\n"
-                                    "  livepatch: %*phN\n"
-                                    "        xen: %*phN\n",
+                                    "  livepatch: %*phN\n"
+                                    "        xen: %*phN\n",
                elf->name, lp_id.len, lp_id.p, len, id);
         return -EINVAL;
     }
@@ -551,6 +592,7 @@ static int check_patching_sections(const struct livepatch_elf *elf)
 {
     unsigned int i;
     static const char *const names[] = { ELF_LIVEPATCH_FUNC,
+                                         ELF_LIVEPATCH_TRACES,
                                          ELF_LIVEPATCH_LOAD_HOOKS,
                                          ELF_LIVEPATCH_UNLOAD_HOOKS,
                                          ELF_LIVEPATCH_PREAPPLY_HOOK,
@@ -688,7 +730,7 @@ static inline int livepatch_check_expectations(const struct payload *payload)
 static int prepare_payload(struct payload *payload,
                            struct livepatch_elf *elf)
 {
-    const struct livepatch_elf_sec *sec;
+    const struct livepatch_elf_sec *func_sec, *trace_sec, *sec;
     const struct payload *data;
     unsigned int i;
     struct livepatch_func *funcs;
@@ -696,7 +738,12 @@ static int prepare_payload(struct payload *payload,
     struct virtual_region *region;
     int rc;
 
-    sec = livepatch_elf_sec_by_name(elf, ELF_LIVEPATCH_FUNC);
+    func_sec = livepatch_elf_sec_by_name(elf, ELF_LIVEPATCH_FUNC);
+    trace_sec = livepatch_elf_sec_by_name(elf, ELF_LIVEPATCH_TRACES);
+
+    sec = trace_sec ? trace_sec : func_sec;
+    payload->is_trace = !!trace_sec;
+
     if ( sec )
     {
         if ( !section_ok(elf, sec, sizeof(*payload->funcs)) )
@@ -719,6 +766,13 @@ static int prepare_payload(struct payload *payload,
                 printk(XENLOG_ERR LIVEPATCH "%s: Wrong version (%u). Expected %d\n",
                        elf->name, f->version, LIVEPATCH_PAYLOAD_VERSION);
                 return -EOPNOTSUPP;
+            }
+
+            if ( payload->is_trace && !f->new_addr )
+            {
+                printk(XENLOG_ERR LIVEPATCH "%s: Trace new_addr is NULL\n",
+                       elf->name);
+                return -EINVAL;
             }
 
             /* 'old_addr', 'new_addr', 'new_size' can all be zero. */
@@ -1460,7 +1514,10 @@ static int apply_payload(struct payload *data)
             continue;
         }
 
-        arch_livepatch_apply(func, state);
+        if ( data->is_trace )
+            arch_livepatch_apply_trace(func);
+        else
+            arch_livepatch_apply(func, state);
         state->applied = LIVEPATCH_FUNC_APPLIED;
     }
 
@@ -1509,7 +1566,10 @@ int revert_payload(struct payload *data)
             continue;
         }
 
-        arch_livepatch_revert(func, state);
+        if ( data->is_trace )
+            arch_livepatch_revert_trace(func);
+        else
+            arch_livepatch_revert(func, state);
         state->applied = LIVEPATCH_FUNC_NOT_APPLIED;
     }
 

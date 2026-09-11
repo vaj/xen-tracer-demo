@@ -275,6 +275,18 @@ config PCI_PASSTHROUGH
 	help
 	  This option enables PCI device passthrough
 
+config ARM64_PATCHABLE_FUNCTION_ENTRY
+    bool "Reserve two NOPs at function entry for livepatching"
+    depends on ARM_64 && LIVEPATCH && $(cc-option,-fpatchable-function-entry=2)
+    default n
+    help
+      This option compiles Xen with -fpatchable-function-entry=2, which
+      reserves two NOP instructions at the beginning of functions. The NOPs
+      will be livepatched with a branch instruction to tracing function
+      registered by user.
+
+      Enable this to use livepatch tracing feature.
+
 endmenu
 
 menu "ARM errata workaround via the alternative framework"

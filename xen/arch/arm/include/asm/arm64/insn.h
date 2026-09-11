@@ -82,6 +82,7 @@ u32 aarch64_insn_gen_branch_imm(unsigned long pc, unsigned long addr,
 				enum aarch64_insn_branch_type type);
 u32 aarch64_insn_gen_hint(enum aarch64_insn_hint_op op);
 u32 aarch64_insn_gen_nop(void);
+u32 aarch64_insn_gen_move_reg(uint32_t rd, uint32_t rm);
 
 /* Wrapper for common code */
 static inline bool insn_is_branch_imm(u32 insn)

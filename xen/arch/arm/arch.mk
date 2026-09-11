@@ -19,6 +19,8 @@ endif
 CFLAGS-$(CONFIG_ARM_64) += -mgeneral-regs-only # No fp registers etc
 $(call cc-option-add,CFLAGS-$(CONFIG_ARM_64),CC,-mno-outline-atomics)
 
+CFLAGS-$(CONFIG_ARM64_PATCHABLE_FUNCTION_ENTRY) += -fpatchable-function-entry=2
+
 ifneq ($(filter command line environment,$(origin CONFIG_EARLY_PRINTK)),)
     $(error You must use 'make menuconfig' to enable/disable early printk now)
 endif

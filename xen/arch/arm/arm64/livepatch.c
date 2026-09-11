@@ -15,6 +15,8 @@
 #include <asm/insn.h>
 #include <asm/livepatch.h>
 
+extern void xen_livepatch_trace_caller(void);
+
 void arch_livepatch_apply(const struct livepatch_func *func,
                           struct livepatch_fstate *state)
 {
@@ -491,6 +493,34 @@ int arch_livepatch_perform_rela(struct livepatch_elf *elf,
     printk(XENLOG_ERR LIVEPATCH "%s: Relative relocation offset is past %s section\n",
            elf->name, base->name);
     return -EINVAL;
+}
+
+void arch_livepatch_apply_trace(const struct livepatch_func *trace)
+{
+    uint32_t *new_ptr;
+    uint32_t insns[2];
+
+    new_ptr = trace->old_addr - (void *)_start + vmap_of_xen_text;
+
+    insns[0] = aarch64_insn_gen_move_reg(9, 30); /* mov x9, lr */
+    insns[1] = aarch64_insn_gen_branch_imm((unsigned long)trace->old_addr + ARCH_PATCH_INSN_SIZE,
+                                           (unsigned long)xen_livepatch_trace_caller,
+                                           AARCH64_INSN_BRANCH_LINK);
+
+    memcpy(new_ptr, insns, sizeof(insns));
+    clean_and_invalidate_dcache_va_range(new_ptr, sizeof(insns));
+}
+
+void arch_livepatch_revert_trace(const struct livepatch_func *trace)
+{
+    void *new_ptr = trace->old_addr - (void *)_start + vmap_of_xen_text;
+    uint32_t insns[2] = {
+        aarch64_insn_gen_nop(),
+        aarch64_insn_gen_nop(),
+    };
+
+    memcpy(new_ptr, insns, sizeof(insns));
+    clean_and_invalidate_dcache_va_range(new_ptr, sizeof(insns));
 }
 
 /*

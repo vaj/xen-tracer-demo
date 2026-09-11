@@ -218,6 +218,11 @@ u32 __kprobes aarch64_insn_gen_nop(void)
 	return aarch64_insn_gen_hint(AARCH64_INSN_HINT_NOP);
 }
 
+u32 aarch64_insn_gen_move_reg(uint32_t rd, uint32_t rm)
+{
+    return 0xaa0003e0 | (rm << 16) | rd;
+}
+
 /*
  * Decode the imm field of a branch, and return the byte offset as a
  * signed value (so it can be used when computing a new branch
